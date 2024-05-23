@@ -35,8 +35,6 @@ CreateMenu(void)
 int
 main(void)
 {
-	setenv("MTL_HUD_ENABLED", "1", 1);
-
 	@autoreleasepool
 	{
 		[NSApplication sharedApplication];

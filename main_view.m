@@ -1,26 +1,22 @@
-@interface MainView : NSView <CALayerDelegate>
+@interface MainView : NSView
 @end
 
 @implementation MainView
 
 id<MTLDevice> device;
-CAMetalLayer *metalLayer;
 id<MTLCommandQueue> commandQueue;
 CVDisplayLinkRef displayLink;
 id<MTLRenderPipelineState> pipelineState;
 
+IOSurfaceRef framebufferSurface;
+id<MTLTexture> framebuffer;
+
 - (instancetype)initWithFrame:(NSRect)frame
 {
 	self = [super initWithFrame:frame];
-
 	self.wantsLayer = YES;
-	self.layer = [CAMetalLayer layer];
-	device = MTLCreateSystemDefaultDevice();
-	metalLayer = (CAMetalLayer *)self.layer;
-	metalLayer.device = device;
-	metalLayer.delegate = self;
-	metalLayer.maximumDrawableCount = 2;
 
+	device = MTLCreateSystemDefaultDevice();
 	commandQueue = [device newCommandQueue];
 
 	NSBundle *bundle = [NSBundle mainBundle];
@@ -28,7 +24,7 @@ id<MTLRenderPipelineState> pipelineState;
 	id<MTLLibrary> library = [device newLibraryWithURL:libraryURL error:nil];
 
 	MTLRenderPipelineDescriptor *descriptor = [[MTLRenderPipelineDescriptor alloc] init];
-	descriptor.colorAttachments[0].pixelFormat = metalLayer.pixelFormat;
+	descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
 	descriptor.vertexFunction = [library newFunctionWithName:@"VertexFunction"];
 	descriptor.fragmentFunction = [library newFunctionWithName:@"FragmentFunction"];
 	pipelineState = [device newRenderPipelineStateWithDescriptor:descriptor error:nil];
@@ -39,13 +35,17 @@ id<MTLRenderPipelineState> pipelineState;
 	return self;
 }
 
-- (void)displayLayer:(CALayer *)layer
+- (void)render
 {
+	if (framebuffer == 0)
+	{
+		return;
+	}
+
 	id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
-	id<CAMetalDrawable> drawable = [metalLayer nextDrawable];
 
 	MTLRenderPassDescriptor *descriptor = [MTLRenderPassDescriptor renderPassDescriptor];
-	descriptor.colorAttachments[0].texture = drawable.texture;
+	descriptor.colorAttachments[0].texture = framebuffer;
 	descriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
 	descriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
 	descriptor.colorAttachments[0].clearColor = MTLClearColorMake(0.5, 0.5, 0.5, 1);
@@ -57,23 +57,37 @@ id<MTLRenderPipelineState> pipelineState;
 	[encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
 	[encoder endEncoding];
 
-	[commandBuffer presentDrawable:drawable];
 	[commandBuffer commit];
-}
-
-- (void)viewDidChangeBackingProperties
-{
-	[super viewDidChangeBackingProperties];
-	metalLayer.contentsScale = self.window.backingScaleFactor;
+	[commandBuffer waitUntilCompleted];
+	self.layer.contents = (__bridge id)framebufferSurface;
 }
 
 - (void)setFrameSize:(NSSize)size
 {
 	[super setFrameSize:size];
-	float scaleFactor = (float)self.window.backingScaleFactor;
-	size.width *= scaleFactor;
-	size.height *= scaleFactor;
-	metalLayer.drawableSize = size;
+	size = [self convertSizeToBacking:self.frame.size];
+
+	if (framebufferSurface != 0)
+	{
+		CFRelease(framebufferSurface);
+	}
+
+	NSDictionary *properties = @{
+		(__bridge NSString *)kIOSurfaceWidth : @(size.width),
+		(__bridge NSString *)kIOSurfaceHeight : @(size.height),
+		(__bridge NSString *)kIOSurfaceBytesPerElement : @4,
+		(__bridge NSString *)kIOSurfacePixelFormat : @(kCVPixelFormatType_32BGRA),
+	};
+	framebufferSurface = IOSurfaceCreate((__bridge CFDictionaryRef)properties);
+
+	MTLTextureDescriptor *descriptor = [[MTLTextureDescriptor alloc] init];
+	descriptor.width = (NSUInteger)size.width;
+	descriptor.height = (NSUInteger)size.height;
+	descriptor.usage = MTLTextureUsageRenderTarget;
+	descriptor.pixelFormat = MTLPixelFormatBGRA8Unorm;
+	framebuffer = [device newTextureWithDescriptor:descriptor
+	                                     iosurface:framebufferSurface
+	                                         plane:0];
 }
 
 static CVReturn
@@ -83,7 +97,7 @@ DisplayLinkCallback(CVDisplayLinkRef _displayLink, const CVTimeStamp *inNow,
 {
 	MainView *view = (__bridge MainView *)context;
 	dispatch_sync(dispatch_get_main_queue(), ^{
-	  [view.layer setNeedsDisplay];
+	  [view render];
 	});
 	return kCVReturnSuccess;
 }
