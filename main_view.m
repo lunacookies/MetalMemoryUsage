@@ -62,10 +62,21 @@ id<MTLTexture> framebuffer;
 	self.layer.contents = (__bridge id)framebufferSurface;
 }
 
+- (void)viewDidChangeBackingProperties
+{
+	[super viewDidChangeBackingProperties];
+	[self updateFramebuffer];
+}
+
 - (void)setFrameSize:(NSSize)size
 {
 	[super setFrameSize:size];
-	size = [self convertSizeToBacking:self.frame.size];
+	[self updateFramebuffer];
+}
+
+- (void)updateFramebuffer
+{
+	NSSize size = [self convertSizeToBacking:self.frame.size];
 
 	if (framebufferSurface != 0)
 	{
