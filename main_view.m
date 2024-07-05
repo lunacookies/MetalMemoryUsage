@@ -5,7 +5,7 @@
 
 id<MTLDevice> device;
 id<MTLCommandQueue> commandQueue;
-CVDisplayLinkRef displayLink;
+CADisplayLink *displayLink;
 id<MTLRenderPipelineState> pipelineState;
 
 IOSurfaceRef framebufferSurface;
@@ -29,9 +29,9 @@ id<MTLTexture> framebuffer;
 	descriptor.fragmentFunction = [library newFunctionWithName:@"FragmentFunction"];
 	pipelineState = [device newRenderPipelineStateWithDescriptor:descriptor error:nil];
 
-	CVDisplayLinkCreateWithActiveCGDisplays(&displayLink);
-	CVDisplayLinkSetOutputCallback(displayLink, DisplayLinkCallback, (__bridge void *)self);
-	CVDisplayLinkStart(displayLink);
+	displayLink = [self displayLinkWithTarget:self selector:@selector(render)];
+	[displayLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+
 	return self;
 }
 
@@ -88,18 +88,6 @@ id<MTLTexture> framebuffer;
 	framebuffer = [device newTextureWithDescriptor:descriptor
 	                                     iosurface:framebufferSurface
 	                                         plane:0];
-}
-
-static CVReturn
-DisplayLinkCallback(CVDisplayLinkRef _displayLink, const CVTimeStamp *inNow,
-        const CVTimeStamp *inOutputTime, CVOptionFlags flagsIn, CVOptionFlags *flagsOut,
-        void *context)
-{
-	MainView *view = (__bridge MainView *)context;
-	dispatch_sync(dispatch_get_main_queue(), ^{
-	  [view render];
-	});
-	return kCVReturnSuccess;
 }
 
 @end
