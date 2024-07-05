@@ -2,14 +2,15 @@
 @end
 
 @implementation MainView
+{
+	id<MTLDevice> device;
+	id<MTLCommandQueue> commandQueue;
+	CADisplayLink *displayLink;
+	id<MTLRenderPipelineState> pipelineState;
 
-id<MTLDevice> device;
-id<MTLCommandQueue> commandQueue;
-CADisplayLink *displayLink;
-id<MTLRenderPipelineState> pipelineState;
-
-IOSurfaceRef framebufferSurface;
-id<MTLTexture> framebuffer;
+	IOSurfaceRef framebufferSurface;
+	id<MTLTexture> framebuffer;
+}
 
 - (instancetype)initWithFrame:(NSRect)frame
 {
